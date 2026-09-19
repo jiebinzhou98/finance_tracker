@@ -2,6 +2,14 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { db, type FinanceTransaction } from "@/lib/finance-db";
 
 let client: SupabaseClient | null | undefined;
+let syncInFlight: Promise<SyncResult> | null = null;
+
+export interface SyncResult {
+  uploaded: number;
+  downloaded: number;
+  pending: number;
+  syncedAt: string;
+}
 
 export function isCloudConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
@@ -44,33 +52,85 @@ const fromRemote = (item: Record<string, unknown>): FinanceTransaction => ({
   syncStatus: "synced",
 });
 
-export async function syncTransactions() {
+const timestamp = (value: string) => Date.parse(value) || 0;
+
+async function markUploadResult(items: FinanceTransaction[], userId: string, syncStatus: "synced" | "error") {
+  await db.transaction("rw", db.transactions, async () => {
+    for (const uploaded of items) {
+      const current = await db.transactions.get(uploaded.id);
+      if (!current || current.updatedAt !== uploaded.updatedAt) continue;
+      await db.transactions.update(uploaded.id, { syncStatus, userId });
+    }
+  });
+}
+
+async function performSync(): Promise<SyncResult> {
   const supabase = getSupabase();
   if (!supabase) throw new Error("尚未配置云同步");
-  const { data: authData } = await supabase.auth.getUser();
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
   const user = authData.user;
   if (!user) throw new Error("请先登录后再同步");
 
-  const pending = await db.transactions.where("syncStatus").anyOf("pending", "error").toArray();
-  if (pending.length) {
-    const { error } = await supabase.from("transactions").upsert(pending.map((item) => toRemote(item, user.id)));
-    if (error) {
-      await db.transactions.bulkUpdate(pending.map((item) => ({ key: item.id, changes: { syncStatus: "error" as const } })));
-      throw error;
-    }
-    await db.transactions.bulkUpdate(pending.map((item) => ({ key: item.id, changes: { syncStatus: "synced" as const, userId: user.id } })));
-  }
-
-  const { data, error } = await supabase
+  // Pull first so an older offline copy can never overwrite a newer cloud copy.
+  const { data, error: downloadError } = await supabase
     .from("transactions")
     .select("*")
     .eq("user_id", user.id)
     .order("updated_at", { ascending: true });
-  if (error) throw error;
-  for (const remote of data ?? []) {
-    const remoteRecord = fromRemote(remote);
-    const local = await db.transactions.get(remoteRecord.id);
-    if (!local || new Date(remoteRecord.updatedAt) > new Date(local.updatedAt)) await db.transactions.put(remoteRecord);
+  if (downloadError) throw downloadError;
+
+  const remoteRecords = (data ?? []).map(fromRemote);
+  const remoteById = new Map(remoteRecords.map((item) => [item.id, item]));
+  const localRecords = await db.transactions.toArray();
+  const uploads: FinanceTransaction[] = [];
+  const downloads: FinanceTransaction[] = [];
+  const alreadySynced: FinanceTransaction[] = [];
+
+  for (const local of localRecords) {
+    // Never move data that is already bound to a different account.
+    if (local.userId && local.userId !== user.id) continue;
+    const remote = remoteById.get(local.id);
+    if (!remote) {
+      uploads.push(local);
+      continue;
+    }
+
+    remoteById.delete(local.id);
+    if (timestamp(remote.updatedAt) > timestamp(local.updatedAt)) downloads.push(remote);
+    else if (timestamp(local.updatedAt) > timestamp(remote.updatedAt)) uploads.push(local);
+    else alreadySynced.push(local);
   }
-  await db.settings.put({ key: "lastSync", value: new Date().toISOString() });
+
+  // Anything left only exists in the cloud, such as records restored on a new phone.
+  downloads.push(...remoteById.values());
+  if (downloads.length) await db.transactions.bulkPut(downloads);
+  if (alreadySynced.length) await markUploadResult(alreadySynced, user.id, "synced");
+
+  if (uploads.length) {
+    const { error: uploadError } = await supabase
+      .from("transactions")
+      .upsert(uploads.map((item) => toRemote(item, user.id)), { onConflict: "id" });
+    if (uploadError) {
+      await markUploadResult(uploads, user.id, "error");
+      throw uploadError;
+    }
+    // Do not mark a row synced if it changed locally while the request was running.
+    await markUploadResult(uploads, user.id, "synced");
+  }
+
+  const syncedAt = new Date().toISOString();
+  await db.settings.put({ key: "lastSync", value: syncedAt });
+  const pending = await db.transactions.where("syncStatus").anyOf("pending", "error").count();
+  return { uploaded: uploads.length, downloaded: downloads.length, pending, syncedAt };
+}
+
+export function syncTransactions() {
+  if (!syncInFlight) {
+    syncInFlight = performSync().finally(() => {
+      syncInFlight = null;
+    });
+  }
+  return syncInFlight;
 }
