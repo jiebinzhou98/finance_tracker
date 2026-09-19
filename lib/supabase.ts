@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { db, type FinanceTransaction } from "@/lib/finance-db";
+import { db, ensureMonthlyRecurringTransactions, getStoredFinancePlan, storeFinancePlan, type FinancePlan, type FinanceTransaction, type RecurringRule } from "@/lib/finance-db";
 
 let client: SupabaseClient | null | undefined;
 let syncInFlight: Promise<SyncResult> | null = null;
@@ -8,6 +8,7 @@ export interface SyncResult {
   uploaded: number;
   downloaded: number;
   pending: number;
+  planChanged: boolean;
   syncedAt: string;
 }
 
@@ -54,6 +55,56 @@ const fromRemote = (item: Record<string, unknown>): FinanceTransaction => ({
 
 const timestamp = (value: string) => Date.parse(value) || 0;
 
+const toRemotePlan = (plan: FinancePlan, userId: string) => ({
+  user_id: userId,
+  monthly_budget: plan.monthlyBudget,
+  monthly_savings_target: plan.monthlySavingsTarget,
+  recurring_rules: plan.recurringRules,
+  updated_at: plan.updatedAt,
+});
+
+const fromRemotePlan = (item: Record<string, unknown>): FinancePlan => ({
+  monthlyBudget: Number(item.monthly_budget) || 0,
+  monthlySavingsTarget: Number(item.monthly_savings_target) || 0,
+  recurringRules: Array.isArray(item.recurring_rules) ? item.recurring_rules as RecurringRule[] : [],
+  updatedAt: String(item.updated_at ?? ""),
+  syncStatus: "synced",
+});
+
+async function syncFinancePlan(supabase: SupabaseClient, userId: string) {
+  const local = await getStoredFinancePlan();
+  const { data, error } = await supabase
+    .from("finance_profiles")
+    .select("user_id, monthly_budget, monthly_savings_target, recurring_rules, updated_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+
+  const remote = data ? fromRemotePlan(data) : null;
+  let current = local;
+  let changed = false;
+
+  if (remote && (!local || timestamp(remote.updatedAt) > timestamp(local.updatedAt))) {
+    current = await storeFinancePlan(remote);
+    changed = true;
+  } else if (local && (!remote || timestamp(local.updatedAt) > timestamp(remote.updatedAt))) {
+    const { error: uploadError } = await supabase
+      .from("finance_profiles")
+      .upsert(toRemotePlan(local, userId), { onConflict: "user_id" });
+    if (uploadError) {
+      await storeFinancePlan({ ...local, syncStatus: "error" });
+      throw uploadError;
+    }
+    current = await storeFinancePlan({ ...local, syncStatus: "synced" });
+    changed = true;
+  } else if (local) {
+    current = await storeFinancePlan({ ...local, syncStatus: "synced" });
+  }
+
+  if (current) await ensureMonthlyRecurringTransactions(current);
+  return changed;
+}
+
 async function markUploadResult(items: FinanceTransaction[], userId: string, syncStatus: "synced" | "error") {
   await db.transaction("rw", db.transactions, async () => {
     for (const uploaded of items) {
@@ -72,6 +123,8 @@ async function performSync(): Promise<SyncResult> {
   if (authError) throw authError;
   const user = authData.user;
   if (!user) throw new Error("请先登录后再同步");
+
+  const planChanged = await syncFinancePlan(supabase, user.id);
 
   // Pull first so an older offline copy can never overwrite a newer cloud copy.
   const { data, error: downloadError } = await supabase
@@ -123,7 +176,7 @@ async function performSync(): Promise<SyncResult> {
   const syncedAt = new Date().toISOString();
   await db.settings.put({ key: "lastSync", value: syncedAt });
   const pending = await db.transactions.where("syncStatus").anyOf("pending", "error").count();
-  return { uploaded: uploads.length, downloaded: downloads.length, pending, syncedAt };
+  return { uploaded: uploads.length, downloaded: downloads.length, pending, planChanged, syncedAt };
 }
 
 export function syncTransactions() {
