@@ -1,0 +1,11 @@
+.env*
+.git
+node_modules
+dist
+.vinext
+.wrangler
+.sites-runtime
+.agents
+.codex
+outputs
+work
