@@ -183,6 +183,23 @@ export async function addTransaction(
   return record;
 }
 
+export async function updateTransaction(
+  id: string,
+  transaction: Pick<FinanceTransaction, "type" | "amount" | "currency" | "category" | "note" | "transactionDate">,
+) {
+  const current = await db.transactions.get(id);
+  if (!current || current.deletedAt) throw new Error("找不到这笔记录");
+  const record: FinanceTransaction = {
+    ...current,
+    ...transaction,
+    amount: Math.max(1, Math.round(transaction.amount)),
+    updatedAt: new Date().toISOString(),
+    syncStatus: "pending",
+  };
+  await db.transactions.put(record);
+  return record;
+}
+
 export async function softDeleteTransaction(id: string) {
   const now = new Date().toISOString();
   await db.transactions.update(id, { deletedAt: now, updatedAt: now, syncStatus: "pending" });
