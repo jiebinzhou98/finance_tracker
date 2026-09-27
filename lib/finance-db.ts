@@ -27,6 +27,8 @@ export interface FinanceTransaction {
   type: TransactionType;
   amount: number;
   currency: string;
+  exchangeRates?: Record<string, number>;
+  exchangeRateDate?: string;
   category: string;
   note: string;
   transactionDate: string;
@@ -168,7 +170,7 @@ export async function getTransactions() {
 }
 
 export async function addTransaction(
-  transaction: Pick<FinanceTransaction, "type" | "amount" | "currency" | "category" | "note" | "transactionDate">,
+  transaction: Pick<FinanceTransaction, "type" | "amount" | "currency" | "category" | "note" | "transactionDate" | "exchangeRates" | "exchangeRateDate">,
 ) {
   const now = new Date().toISOString();
   const record: FinanceTransaction = {
@@ -185,7 +187,7 @@ export async function addTransaction(
 
 export async function updateTransaction(
   id: string,
-  transaction: Pick<FinanceTransaction, "type" | "amount" | "currency" | "category" | "note" | "transactionDate">,
+  transaction: Pick<FinanceTransaction, "type" | "amount" | "currency" | "category" | "note" | "transactionDate" | "exchangeRates" | "exchangeRateDate">,
 ) {
   const current = await db.transactions.get(id);
   if (!current || current.deletedAt) throw new Error("找不到这笔记录");

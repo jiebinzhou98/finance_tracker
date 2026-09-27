@@ -4,6 +4,8 @@ create table if not exists public.transactions (
   type text not null check (type in ('income', 'expense')),
   amount bigint not null check (amount > 0),
   currency text not null check (char_length(currency) = 3),
+  exchange_rates jsonb check (exchange_rates is null or jsonb_typeof(exchange_rates) = 'object'),
+  exchange_rate_date date,
   category text not null,
   note text not null default '',
   transaction_date date not null,

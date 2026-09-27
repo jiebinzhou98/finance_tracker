@@ -1,4 +1,5 @@
 import { addTransaction, getTransactions, type TransactionType } from "@/lib/finance-db";
+import { displayAmount, getExchangeRatesForDate, supportedCurrencies } from "@/lib/exchange-rates";
 
 type ToolDefinition = {
   name: string;
@@ -31,8 +32,8 @@ export function registerFinanceTools(currency: string, onChanged: () => Promise<
     async execute() {
       const month = new Date().toISOString().slice(0, 7);
       const records = (await getTransactions()).filter((item) => !item.deletedAt && item.transactionDate.startsWith(month));
-      const income = records.filter((item) => item.type === "income").reduce((sum, item) => sum + item.amount, 0);
-      const expense = records.filter((item) => item.type === "expense").reduce((sum, item) => sum + item.amount, 0);
+      const income = records.filter((item) => item.type === "income").reduce((sum, item) => sum + displayAmount(item, currency), 0);
+      const expense = records.filter((item) => item.type === "expense").reduce((sum, item) => sum + displayAmount(item, currency), 0);
       return { currency, incomeInMinorUnits: income, expenseInMinorUnits: expense, balanceInMinorUnits: income - expense };
     },
   }, { signal: lifecycle.signal })).catch(() => undefined);
@@ -46,6 +47,7 @@ export function registerFinanceTools(currency: string, onChanged: () => Promise<
       properties: {
         type: { type: "string", enum: ["income", "expense"] },
         amount: { type: "number", exclusiveMinimum: 0 },
+        currency: { type: "string", enum: supportedCurrencies },
         category: { type: "string", minLength: 1 },
         note: { type: "string" },
         date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
@@ -57,7 +59,9 @@ export function registerFinanceTools(currency: string, onChanged: () => Promise<
     async execute(input) {
       const value = input as Record<string, unknown>;
       if ((value.type !== "income" && value.type !== "expense") || typeof value.amount !== "number" || value.amount <= 0 || typeof value.category !== "string" || !value.category || typeof value.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) throw new Error("无效的收支记录");
-      const record = await addTransaction({ type: value.type as TransactionType, amount: Math.round(value.amount * 100), currency, category: value.category, note: typeof value.note === "string" ? value.note : "", transactionDate: value.date });
+      const transactionCurrency = typeof value.currency === "string" && supportedCurrencies.includes(value.currency as typeof supportedCurrencies[number]) ? value.currency : currency;
+      const snapshot = transactionCurrency === currency ? undefined : await getExchangeRatesForDate(value.date);
+      const record = await addTransaction({ type: value.type as TransactionType, amount: Math.round(value.amount * 100), currency: transactionCurrency, exchangeRates: snapshot?.rates, exchangeRateDate: snapshot?.date, category: value.category, note: typeof value.note === "string" ? value.note : "", transactionDate: value.date });
       await onChanged();
       return { id: record.id, status: "saved-locally" };
     },
