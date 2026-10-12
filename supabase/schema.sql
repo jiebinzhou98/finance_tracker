@@ -7,6 +7,7 @@ create table if not exists public.transactions (
   exchange_rates jsonb check (exchange_rates is null or jsonb_typeof(exchange_rates) = 'object'),
   exchange_rate_date date,
   category text not null,
+  subcategory text,
   note text not null default '',
   transaction_date date not null,
   created_at timestamptz not null default now(),

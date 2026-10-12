@@ -49,6 +49,7 @@ export function registerFinanceTools(currency: string, onChanged: () => Promise<
         amount: { type: "number", exclusiveMinimum: 0 },
         currency: { type: "string", enum: supportedCurrencies },
         category: { type: "string", minLength: 1 },
+        subcategory: { type: "string", enum: ["奶茶", "蛋糕"] },
         note: { type: "string" },
         date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
       },
@@ -59,9 +60,11 @@ export function registerFinanceTools(currency: string, onChanged: () => Promise<
     async execute(input) {
       const value = input as Record<string, unknown>;
       if ((value.type !== "income" && value.type !== "expense") || typeof value.amount !== "number" || value.amount <= 0 || typeof value.category !== "string" || !value.category || typeof value.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) throw new Error("无效的收支记录");
+      if (value.category === "糖分" && value.subcategory !== "奶茶" && value.subcategory !== "蛋糕") throw new Error("糖分记录需要选择奶茶或蛋糕");
       const transactionCurrency = typeof value.currency === "string" && supportedCurrencies.includes(value.currency as typeof supportedCurrencies[number]) ? value.currency : currency;
       const snapshot = transactionCurrency === currency ? undefined : await getExchangeRatesForDate(value.date);
-      const record = await addTransaction({ type: value.type as TransactionType, amount: Math.round(value.amount * 100), currency: transactionCurrency, exchangeRates: snapshot?.rates, exchangeRateDate: snapshot?.date, category: value.category, note: typeof value.note === "string" ? value.note : "", transactionDate: value.date });
+      const subcategory = value.category === "糖分" && typeof value.subcategory === "string" ? value.subcategory : undefined;
+      const record = await addTransaction({ type: value.type as TransactionType, amount: Math.round(value.amount * 100), currency: transactionCurrency, exchangeRates: snapshot?.rates, exchangeRateDate: snapshot?.date, category: value.category, subcategory, note: typeof value.note === "string" ? value.note : "", transactionDate: value.date });
       await onChanged();
       return { id: record.id, status: "saved-locally" };
     },
