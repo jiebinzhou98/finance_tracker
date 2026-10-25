@@ -147,11 +147,6 @@ export default function FinanceApp() {
   useEffect(() => {
     setOnline(navigator.onLine);
     void load();
-    const recoveryParams = new URLSearchParams(window.location.hash.slice(1));
-    if (recoveryParams.get("type") === "recovery" || new URL(window.location.href).searchParams.get("type") === "recovery") {
-      setPasswordRecovery(true);
-      setView("settings");
-    }
     const supabase = getSupabase();
     const handleOnline = () => {
       setOnline(true);
