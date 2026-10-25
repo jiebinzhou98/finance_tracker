@@ -51,6 +51,9 @@ export default function FinanceApp() {
   const [syncMessage, setSyncMessage] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [signedInEmail, setSignedInEmail] = useState("");
   const [financePlan, setFinancePlan] = useState<FinancePlan>(() => emptyFinancePlan());
   const [savingPlan, setSavingPlan] = useState(false);
@@ -144,6 +147,11 @@ export default function FinanceApp() {
   useEffect(() => {
     setOnline(navigator.onLine);
     void load();
+    const recoveryParams = new URLSearchParams(window.location.hash.slice(1));
+    if (recoveryParams.get("type") === "recovery" || new URL(window.location.href).searchParams.get("type") === "recovery") {
+      setPasswordRecovery(true);
+      setView("settings");
+    }
     const supabase = getSupabase();
     const handleOnline = () => {
       setOnline(true);
@@ -167,6 +175,11 @@ export default function FinanceApp() {
       const email = session?.user.email ?? "";
       signedInRef.current = email;
       setSignedInEmail(email);
+      if (event === "PASSWORD_RECOVERY") {
+        setPasswordRecovery(true);
+        setView("settings");
+        setSyncMessage("恢复链接已验证，请设置新密码");
+      }
       if (!session && retryTimerRef.current !== null) {
         window.clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
@@ -241,6 +254,42 @@ export default function FinanceApp() {
     }
     if (!syncingRef.current) setSyncing(false);
   }
+  async function handleForgotPassword() {
+    const email = authEmail.trim();
+    if (!email) return setSyncMessage("请先输入注册邮箱");
+    const supabase = getSupabase();
+    if (!supabase) return setSyncMessage("请先在 Vercel 配置 Supabase 环境变量");
+    setSyncing(true);
+    setSyncMessage("正在发送密码恢复邮件…");
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/` });
+    setSyncing(false);
+    setSyncMessage(error ? `无法发送恢复邮件：${error.message}` : "如果该邮箱已注册，你会收到一封密码恢复邮件");
+  }
+  async function handleUpdatePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (newPassword.length < 8) return setSyncMessage("新密码至少需要 8 位");
+    if (newPassword !== confirmPassword) return setSyncMessage("两次输入的密码不一致");
+    const supabase = getSupabase();
+    if (!supabase) return setSyncMessage("尚未配置 Supabase");
+    setSyncing(true);
+    setSyncMessage("正在更新密码…");
+    const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      setSyncing(false);
+      return setSyncMessage(`密码更新失败：${error.message}`);
+    }
+    const email = data.user.email ?? signedInRef.current;
+    signedInRef.current = email;
+    setSignedInEmail(email);
+    setPasswordRecovery(false);
+    setNewPassword("");
+    setConfirmPassword("");
+    setAuthPassword("");
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setSyncMessage("密码已更新，正在同步本地记录…");
+    setSyncing(false);
+    if (navigator.onLine) window.setTimeout(() => void handleSync(true), 0);
+  }
   async function downloadBackup() {
     const content = await exportData(); const url = URL.createObjectURL(new Blob([content], { type: "application/json" })); const link = document.createElement("a");
     link.href = url; link.download = `morrow-backup-${today()}.json`; link.click(); URL.revokeObjectURL(url);
@@ -290,7 +339,7 @@ export default function FinanceApp() {
         {view === "transactions" && <TransactionsView transactions={activeTransactions} money={money} amountFor={amountInDisplayCurrency} displayCurrency={currency} dateFilter={transactionDateFilter} onClearDateFilter={() => setTransactionDateFilter(null)} onEdit={setEditingTransaction} onDelete={handleDelete} onAdd={() => setDialogOpen(true)} />}
         {view === "insights" && <InsightsView expense={expense} money={money} breakdown={expenseBreakdown} chartData={chartData} transactions={monthTransactions.map((item) => ({ ...item, amount: amountInDisplayCurrency(item) }))} month={selectedMonth} onMonthChange={setSelectedMonth} onViewDate={openTransactionsForDate} />}
         {view === "summary" && <SummaryView expense={expense} previousExpense={previousExpense} money={money} breakdown={expenseBreakdown} previousBreakdown={previousExpenseBreakdown} month={selectedMonth} onMonthChange={setSelectedMonth} />}
-        {view === "settings" && <SettingsViewWithPlan currency={currency} financePlan={financePlan} savingPlan={savingPlan} onSavePlan={handleSavePlan} onCurrencyChange={changeCurrency} configured={isCloudConfigured()} signedInEmail={signedInEmail} syncing={syncing} syncMessage={syncMessage} email={authEmail} password={authPassword} onEmail={setAuthEmail} onPassword={setAuthPassword} onAuth={handleAuth} onSync={() => void handleSync(false)} onExport={downloadBackup} />}
+        {view === "settings" && <SettingsViewWithPlan currency={currency} financePlan={financePlan} savingPlan={savingPlan} onSavePlan={handleSavePlan} onCurrencyChange={changeCurrency} configured={isCloudConfigured()} signedInEmail={signedInEmail} syncing={syncing} syncMessage={syncMessage} email={authEmail} password={authPassword} passwordRecovery={passwordRecovery} newPassword={newPassword} confirmPassword={confirmPassword} onEmail={setAuthEmail} onPassword={setAuthPassword} onNewPassword={setNewPassword} onConfirmPassword={setConfirmPassword} onAuth={handleAuth} onForgotPassword={() => void handleForgotPassword()} onUpdatePassword={handleUpdatePassword} onSync={() => void handleSync(false)} onExport={downloadBackup} />}
       </div>
     </main>
     <nav className="fixed inset-x-2 bottom-[calc(.75rem+env(safe-area-inset-bottom))] z-40 grid grid-cols-5 rounded-[22px] border border-white/70 bg-[#0b1220]/95 p-2 text-white shadow-[0_18px_50px_rgba(11,18,32,.28)] backdrop-blur-xl lg:hidden" aria-label="移动端导航">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => changeView(item.id)} className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-2xl text-xs transition ${view === item.id ? "bg-white/12 text-white" : "text-slate-400"}`}><Icon className="size-[18px]" />{item.label}</button>; })}</nav>
@@ -480,7 +529,15 @@ function InsightsView({ expense, money, breakdown, chartData, transactions, mont
   return <div className="mx-auto max-w-5xl"><div className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">{formatMonth(month)}支出分析</p><h1 className="page-title">看见钱去了哪里</h1></div><MonthNavigator month={month} onChange={onMonthChange} /></div><ExpenseHeatmap key={month} transactions={transactions} month={month} money={money} onViewDate={onViewDate} /><div className="mt-5 grid gap-5 md:grid-cols-[.8fr_1.2fr]"><div className="surface-card p-6"><p className="section-subtitle">当月总支出</p><p className="mt-2 text-3xl font-bold tracking-[-.04em]"><AnimatedCurrency value={expense} money={money} /></p><div className="mt-8 space-y-5">{breakdown.length ? breakdown.map(([category, value]) => <div key={category}><div className="mb-2 flex items-center justify-between text-sm"><span className="font-medium">{category}</span><span className="text-[#77859a]">{money(value)}</span></div><div className="h-2 overflow-hidden rounded-full bg-[#edf1f7]"><div className="h-full rounded-full" style={{ width: `${expense ? Math.max(6, value / expense * 100) : 0}%`, backgroundColor: categoryColors[category] ?? "#94a3b8" }} /></div></div>) : <p className="py-16 text-center text-sm text-[#8b97a9]">添加支出后，这里会显示分类占比。</p>}</div></div><div className="surface-card p-6"><h2 className="section-title">收入与支出</h2><p className="section-subtitle">截至所选月份的六个月</p><div className="mt-6 h-[330px]"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData} margin={{ left: -20, right: 5 }}><CartesianGrid vertical={false} stroke="#edf1f7"/><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#8793a7", fontSize: 12 }}/><Tooltip contentStyle={{ border: 0, borderRadius: 14, boxShadow: "0 14px 40px rgba(20,33,61,.12)" }}/><Area type="monotone" dataKey="income" name="收入" stroke="#24a36b" fill="#24a36b14" strokeWidth={2.5}/><Area type="monotone" dataKey="expense" name="支出" stroke="#2864f0" fill="#2864f014" strokeWidth={2.5}/></AreaChart></ResponsiveContainer></div></div></div></div>;
 }
 
-function SettingsView({ currency, onCurrencyChange, configured, signedInEmail, syncing, syncMessage, email, password, onEmail, onPassword, onAuth, onSync, onExport }: { currency: string; onCurrencyChange: (v: string) => void; configured: boolean; signedInEmail: string; syncing: boolean; syncMessage: string; email: string; password: string; onEmail: (v: string) => void; onPassword: (v: string) => void; onAuth: (e: FormEvent<HTMLFormElement>) => void; onSync: () => void; onExport: () => void }) { return <div className="mx-auto max-w-3xl"><div className="mb-6"><p className="eyebrow">偏好与备份</p><h1 className="page-title">设置</h1></div><div className="space-y-5"><section className="surface-card p-5 md:p-6"><div className="flex items-center justify-between gap-5"><div><h2 className="section-title">默认显示货币</h2><p className="section-subtitle">概览、分析与总结会统一换算为此货币</p></div><NativeSelect value={currency} onChange={(e) => onCurrencyChange(e.target.value)} className="w-32"><CurrencyOptions /></NativeSelect></div></section><section className="surface-card p-5 md:p-6"><div className="mb-5 flex items-start justify-between gap-4"><div><h2 className="section-title">云端同步</h2><p className="section-subtitle">本地记录优先，登录后备份至 Supabase</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${configured ? "bg-[#e4f8ef] text-[#167250]" : "bg-[#fff5dc] text-[#936700]"}`}>{configured ? "已配置" : "待配置"}</span></div>{signedInEmail ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#f5f8fd] p-4"><div><p className="text-sm font-semibold">{signedInEmail}</p><p className="mt-1 text-xs text-[#7c899c]">账号已连接</p></div><Button onClick={onSync} disabled={syncing} variant="outline" className="rounded-xl bg-white">{syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />}立即同步</Button></div> : <form onSubmit={onAuth} className="grid gap-4 md:grid-cols-2"><div className="space-y-2"><Label htmlFor="email">邮箱</Label><Input id="email" type="email" value={email} onChange={(e) => onEmail(e.target.value)} placeholder="name@example.com" required /></div><div className="space-y-2"><Label htmlFor="password">密码</Label><Input id="password" type="password" minLength={8} value={password} onChange={(e) => onPassword(e.target.value)} placeholder="至少 8 位" required /></div><Button type="submit" disabled={syncing || !configured} className="rounded-xl bg-[#2864f0] md:col-span-2">{syncing ? <Loader2 className="animate-spin" /> : <Cloud />}登录或创建账号</Button></form>}{syncMessage && <p aria-live="polite" className="mt-4 text-sm text-[#617087]">{syncMessage}</p>}</section><section className="surface-card p-5 md:p-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="section-title">本地备份</h2><p className="section-subtitle">下载包含所有记录的 JSON 文件</p></div><Button onClick={onExport} variant="outline" className="rounded-xl"><Download />导出备份</Button></div></section></div></div>; }
+function SettingsView(props: SettingsViewWithPlanProps) { const { currency, onCurrencyChange, configured, syncMessage, onExport } = props; return <div className="mx-auto max-w-3xl"><div className="mb-6"><p className="eyebrow">偏好与备份</p><h1 className="page-title">设置</h1></div><div className="space-y-5"><section className="surface-card p-5 md:p-6"><div className="flex items-center justify-between gap-5"><div><h2 className="section-title">默认显示货币</h2><p className="section-subtitle">概览、分析与总结会统一换算为此货币</p></div><NativeSelect value={currency} onChange={(e) => onCurrencyChange(e.target.value)} className="w-32"><CurrencyOptions /></NativeSelect></div></section><section className="surface-card p-5 md:p-6"><div className="mb-5 flex items-start justify-between gap-4"><div><h2 className="section-title">云端同步</h2><p className="section-subtitle">本地记录优先，登录后备份至 Supabase</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${configured ? "bg-[#e4f8ef] text-[#167250]" : "bg-[#fff5dc] text-[#936700]"}`}>{configured ? "已配置" : "待配置"}</span></div><AuthSettings {...props} />{syncMessage && <p aria-live="polite" className="mt-4 text-sm text-[#617087]">{syncMessage}</p>}</section><section className="surface-card p-5 md:p-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="section-title">本地备份</h2><p className="section-subtitle">下载包含所有记录的 JSON 文件</p></div><Button onClick={onExport} variant="outline" className="rounded-xl"><Download />导出备份</Button></div></section></div></div>; }
+
+type AuthSettingsProps = Pick<SettingsViewWithPlanProps, "configured" | "signedInEmail" | "syncing" | "email" | "password" | "passwordRecovery" | "newPassword" | "confirmPassword" | "onEmail" | "onPassword" | "onNewPassword" | "onConfirmPassword" | "onAuth" | "onForgotPassword" | "onUpdatePassword" | "onSync">;
+
+function AuthSettings({ configured, signedInEmail, syncing, email, password, passwordRecovery, newPassword, confirmPassword, onEmail, onPassword, onNewPassword, onConfirmPassword, onAuth, onForgotPassword, onUpdatePassword, onSync }: AuthSettingsProps) {
+  if (passwordRecovery) return <form onSubmit={onUpdatePassword} className="grid gap-4 md:grid-cols-2"><div className="rounded-2xl bg-[#eef3ff] p-4 md:col-span-2"><p className="text-sm font-semibold text-[#1f55d7]">设置新密码</p><p className="mt-1 text-xs leading-5 text-[#617087]">恢复链接已验证。更新密码不会删除这部手机里的任何本地记录。</p></div><div className="space-y-2"><Label htmlFor="new-password">新密码</Label><Input id="new-password" type="password" minLength={8} value={newPassword} onChange={(event) => onNewPassword(event.target.value)} autoComplete="new-password" placeholder="至少 8 位" required /></div><div className="space-y-2"><Label htmlFor="confirm-password">确认新密码</Label><Input id="confirm-password" type="password" minLength={8} value={confirmPassword} onChange={(event) => onConfirmPassword(event.target.value)} autoComplete="new-password" placeholder="再次输入新密码" required /></div><Button type="submit" disabled={syncing || !configured} className="rounded-xl bg-[#2864f0] md:col-span-2">{syncing ? <Loader2 className="animate-spin" /> : <Cloud />}保存新密码</Button></form>;
+  if (signedInEmail) return <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#f5f8fd] p-4"><div><p className="text-sm font-semibold">{signedInEmail}</p><p className="mt-1 text-xs text-[#7c899c]">账号已连接</p></div><Button onClick={onSync} disabled={syncing} variant="outline" className="rounded-xl bg-white">{syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />}立即同步</Button></div>;
+  return <form onSubmit={onAuth} className="grid gap-4 md:grid-cols-2"><div className="space-y-2"><Label htmlFor="email">邮箱</Label><Input id="email" type="email" value={email} onChange={(event) => onEmail(event.target.value)} autoComplete="email" placeholder="name@example.com" required /></div><div className="space-y-2"><Label htmlFor="password">密码</Label><Input id="password" type="password" minLength={8} value={password} onChange={(event) => onPassword(event.target.value)} autoComplete="current-password" placeholder="至少 8 位" required /></div><div className="-mt-1 flex justify-end md:col-span-2"><button type="button" onClick={onForgotPassword} disabled={syncing || !configured} className="text-sm font-semibold text-[#2864f0] transition hover:text-[#1f55d7] disabled:cursor-not-allowed disabled:opacity-50">忘记密码？</button></div><Button type="submit" disabled={syncing || !configured} className="rounded-xl bg-[#2864f0] md:col-span-2">{syncing ? <Loader2 className="animate-spin" /> : <Cloud />}登录或创建账号</Button></form>;
+}
 
 type SettingsViewWithPlanProps = {
   currency: string;
@@ -494,16 +551,23 @@ type SettingsViewWithPlanProps = {
   syncMessage: string;
   email: string;
   password: string;
+  passwordRecovery: boolean;
+  newPassword: string;
+  confirmPassword: string;
   onEmail: (value: string) => void;
   onPassword: (value: string) => void;
+  onNewPassword: (value: string) => void;
+  onConfirmPassword: (value: string) => void;
   onAuth: (event: FormEvent<HTMLFormElement>) => void;
+  onForgotPassword: () => void;
+  onUpdatePassword: (event: FormEvent<HTMLFormElement>) => void;
   onSync: () => void;
   onExport: () => void;
 };
 
 function SettingsViewWithPlan({ financePlan, savingPlan, onSavePlan, ...settingsProps }: SettingsViewWithPlanProps) {
   return <>
-    <SettingsView {...settingsProps} />
+    <SettingsView {...settingsProps} financePlan={financePlan} savingPlan={savingPlan} onSavePlan={onSavePlan} />
     <div className="mx-auto mt-5 max-w-3xl"><PlanSettings key={financePlan.updatedAt || "empty"} plan={financePlan} currency={settingsProps.currency} saving={savingPlan} onSave={onSavePlan} /></div>
   </>;
 }
