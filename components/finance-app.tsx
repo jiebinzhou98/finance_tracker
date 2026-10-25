@@ -235,11 +235,25 @@ export default function FinanceApp() {
     event.preventDefault(); const supabase = getSupabase(); if (!supabase) return setSyncMessage("请先在 Vercel 配置 Supabase 环境变量");
     setSyncing(true); const signIn = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
     if (signIn.error) {
-      const signUp = await supabase.auth.signUp({ email: authEmail, password: authPassword });
-      if (signUp.error) setSyncMessage(signUp.error.message); else setSyncMessage(signUp.data.session ? "账号已建立" : "请检查邮箱完成验证");
-      const email = signUp.data.session?.user.email ?? "";
-      signedInRef.current = email;
-      setSignedInEmail(email);
+      if (signIn.error.code === "email_not_confirmed") {
+        setSyncMessage("邮箱尚未验证，请先打开验证邮件完成确认");
+      } else if (signIn.error.code !== "invalid_credentials") {
+        setSyncMessage(`登录失败：${signIn.error.message}`);
+      } else {
+        const signUp = await supabase.auth.signUp({ email: authEmail, password: authPassword });
+        const existingAccount = signUp.error?.code === "user_already_exists" || signUp.error?.code === "email_exists" ||
+          /already (registered|exists)/i.test(signUp.error?.message ?? "") || signUp.data.user?.identities?.length === 0;
+        if (existingAccount) {
+          setSyncMessage("邮箱或密码错误，请重试或使用“忘记密码”");
+        } else if (signUp.error) {
+          setSyncMessage(`无法创建账号：${signUp.error.message}`);
+        } else {
+          setSyncMessage(signUp.data.session ? "账号已建立" : "请检查邮箱完成验证");
+          const email = signUp.data.session?.user.email ?? "";
+          signedInRef.current = email;
+          setSignedInEmail(email);
+        }
+      }
     } else {
       const email = signIn.data.user.email ?? "";
       signedInRef.current = email;
