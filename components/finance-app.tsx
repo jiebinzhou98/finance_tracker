@@ -281,7 +281,7 @@ export default function FinanceApp() {
     setConfirmPassword("");
     setAuthPassword("");
     window.history.replaceState({}, document.title, window.location.pathname);
-    setSyncMessage("密码已更新，正在同步本地记录…");
+    setSyncMessage("密码已更新。若恢复邮件在 Safari 打开，请回到主屏幕上的 Morrow，用新密码登录并同步");
     setSyncing(false);
     if (navigator.onLine) window.setTimeout(() => void handleSync(true), 0);
   }
