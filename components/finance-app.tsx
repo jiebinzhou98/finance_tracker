@@ -566,6 +566,11 @@ function MonthlySummary({ month, expense, previousExpense, breakdown, previousBr
   const delta = expense - previousExpense;
   const percentage = previousExpense > 0 ? Math.round(Math.abs(delta) / previousExpense * 100) : null;
   const topCategory = breakdown[0];
+  const shareLabel = (amount: number) => {
+    if (!expense || !amount) return "0%";
+    const share = amount / expense * 100;
+    return share < 1 ? "<1%" : `${Math.round(share)}%`;
+  };
   const currentByCategory = new Map(breakdown);
   const previousByCategory = new Map(previousBreakdown);
   const categoryComparison = [...new Set([...currentByCategory.keys(), ...previousByCategory.keys()])]
@@ -579,15 +584,22 @@ function MonthlySummary({ month, expense, previousExpense, breakdown, previousBr
       <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-[#8e6553]">月度总结</p><h2 id="monthly-summary-title" className="mt-1 text-xl font-bold tracking-[-.03em]">{formatMonth(month)}消费表现</h2></div><span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${delta > 0 ? "bg-[#fff0f2] text-[#c74458]" : delta < 0 ? "bg-[#edf2e8] text-[#536f4f]" : "bg-white/60 text-[#66715f]"}`}>{comparisonTitle}</span></div>
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <div><p className="text-sm text-[#72796e]">当月支出</p><p className="mt-1 text-2xl font-bold tracking-[-.04em]"><AnimatedCurrency value={expense} money={money} /></p></div>
-        <div><p className="text-sm text-[#72796e]">较上月</p><p className={`mt-1 text-lg font-bold ${delta > 0 ? "text-[#aa5844]" : delta < 0 ? "text-[#536f4f]" : "text-white"}`}>{delta === 0 ? "没有变化" : `${delta > 0 ? "+" : "−"}${money(Math.abs(delta))}`}</p><p className="mt-1 text-xs text-slate-400">{comparisonDetail}</p></div>
+        <div><p className="text-sm text-[#72796e]">较上月</p><p className={`mt-1 text-lg font-bold ${delta > 0 ? "text-[#aa5844]" : delta < 0 ? "text-[#536f4f]" : "text-[#66715f]"}`}>{delta === 0 ? "没有变化" : `${delta > 0 ? "+" : "−"}${money(Math.abs(delta))}`}</p><p className="mt-1 text-xs text-slate-400">{comparisonDetail}</p></div>
         <div><p className="text-sm text-[#72796e]">最大消费分类</p><p className="mt-1 text-lg font-bold">{topCategory ? `${categoryEmoji[topCategory[0]] ?? "•"} ${topCategory[0]}` : "暂无记录"}</p><p className="mt-1 text-xs text-slate-400">{topCategory ? `${money(topCategory[1])} · 占 ${Math.round(topCategory[1] / expense * 100)}%` : `上月支出 ${money(previousExpense)}`}</p></div>
       </div>
     </div>
-    <div className="p-5 md:p-6"><div className="flex items-end justify-between gap-3"><div><h3 className="section-title">钱花在哪里</h3><p className="section-subtitle">各分类与 {formatMonth(shiftMonth(month, -1))} 对比</p></div></div>
+    <div className="p-5 md:p-6"><div className="flex items-end justify-between gap-3"><div><h3 className="section-title">钱花在哪里</h3><p className="section-subtitle">百分比为占本月总支出的比例</p><p className="mt-1 text-xs text-[#66715f]">金额与 {formatMonth(shiftMonth(month, -1))} 对比</p></div></div>
+      {expense > 0 && <div className="mt-5">
+        <div className="flex h-4 overflow-hidden rounded-full bg-[#f1eee7]" role="img" aria-label={breakdown.map(([category, amount]) => `${category}占本月支出${shareLabel(amount)}`).join("，")}>
+          {breakdown.map(([category, amount]) => <span key={category} title={`${category} · ${shareLabel(amount)}`} className="h-full transition-[width] duration-500" style={{ width: `${amount / expense * 100}%`, backgroundColor: categoryColors[category] ?? "#aaa99c" }} />)}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-[#66715f]">{breakdown.map(([category, amount]) => <span key={category} className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ backgroundColor: categoryColors[category] ?? "#aaa99c" }} />{category} {shareLabel(amount)}</span>)}</div>
+      </div>}
       {categoryComparison.length ? <div className="mt-5 grid gap-3 md:grid-cols-2">{categoryComparison.map(({ category, current, previous }) => {
         const categoryDelta = current - previous;
+        const share = shareLabel(current);
         const changeLabel = previous === 0 && current > 0 ? "本月新增" : categoryDelta > 0 ? `较上月多 ${money(categoryDelta)}` : categoryDelta < 0 ? `较上月少 ${money(Math.abs(categoryDelta))}` : "与上月相同";
-        return <div key={category} className="rounded-2xl border border-[#e9e6dc] bg-[#faf9f5] p-4"><div className="flex items-center gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl text-lg" style={{ backgroundColor: `${categoryColors[category] ?? "#aaa99c"}18` }}>{categoryEmoji[category] ?? "•"}</span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className="font-semibold text-[#30392f]">{category}</p><p className="shrink-0 font-bold tabular-nums text-[#30392f]">{money(current)}</p></div><p className={`mt-1 text-xs font-medium ${categoryDelta > 0 ? "text-[#c74458]" : categoryDelta < 0 ? "text-[#536f4f]" : "text-[#7e8176]"}`}>{changeLabel}</p></div></div><div className="mt-4 space-y-2">{[{ label: "上月", amount: previous, color: "#d5d3c9" }, { label: "本月", amount: current, color: "#dc9b80" }].map((bar) => <div key={bar.label} className="flex items-center gap-2 text-[11px] text-[#66715f]"><span className="w-6 shrink-0">{bar.label}</span><div className="h-2 flex-1 overflow-hidden rounded-full bg-[#f1eee7]"><div className="h-full rounded-full" style={{ width: `${Math.max(current, previous) ? bar.amount / Math.max(current, previous) * 100 : 0}%`, backgroundColor: bar.color }} /></div><span className="w-20 shrink-0 text-right tabular-nums">{money(bar.amount)}</span></div>)}</div></div>;
+        return <div key={category} className="rounded-2xl border border-[#e9e6dc] bg-[#faf9f5] p-4"><div className="flex items-center gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl text-lg" style={{ backgroundColor: `${categoryColors[category] ?? "#aaa99c"}18` }}>{categoryEmoji[category] ?? "•"}</span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className="font-semibold text-[#30392f]">{category}</p><div className="flex flex-wrap items-center justify-end gap-2"><p className="font-bold tabular-nums text-[#30392f]">{money(current)}</p><span aria-label={`${category}占本月支出${share}`} className="rounded-full bg-[#e6eddf] px-2 py-1 text-xs font-bold tabular-nums text-[#4d684a]">{share}</span></div></div><p className={`mt-1 text-xs font-medium ${categoryDelta > 0 ? "text-[#c74458]" : categoryDelta < 0 ? "text-[#536f4f]" : "text-[#7e8176]"}`}>{changeLabel}</p></div></div><div className="mt-4 space-y-2">{[{ label: "上月", amount: previous, color: "#d5d3c9" }, { label: "本月", amount: current, color: "#dc9b80" }].map((bar) => <div key={bar.label} className="flex items-center gap-2 text-[11px] text-[#66715f]"><span className="w-6 shrink-0">{bar.label}</span><div className="h-2 flex-1 overflow-hidden rounded-full bg-[#f1eee7]"><div className="h-full rounded-full" style={{ width: `${Math.max(current, previous) ? bar.amount / Math.max(current, previous) * 100 : 0}%`, backgroundColor: bar.color }} /></div><span className="w-20 shrink-0 text-right tabular-nums">{money(bar.amount)}</span></div>)}</div></div>;
       })}</div> : <p className="py-10 text-center text-sm text-[#81877b]">这个月和上个月都还没有支出记录。</p>}
     </div>
   </section>;
