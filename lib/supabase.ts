@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { syncSavings } from "@/lib/savings-sync";
 import { db, ensureMonthlyRecurringTransactions, getStoredFinancePlan, storeFinancePlan, type FinancePlan, type FinanceTransaction, type RecurringRule } from "@/lib/finance-db";
 
 let client: SupabaseClient | null | undefined;
@@ -180,9 +181,10 @@ async function performSync(): Promise<SyncResult> {
   }
 
   const syncedAt = new Date().toISOString();
+  const savings = await syncSavings(supabase, user.id);
   await db.settings.put({ key: "lastSync", value: syncedAt });
   const pending = await db.transactions.where("syncStatus").anyOf("pending", "error").count();
-  return { uploaded: uploads.length, downloaded: downloads.length, pending, planChanged, syncedAt };
+  return { uploaded: uploads.length + savings.uploaded, downloaded: downloads.length + savings.downloaded, pending: pending + savings.pending, planChanged, syncedAt };
 }
 
 export function syncTransactions() {

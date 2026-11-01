@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
+import type { SavingsGoal, SavingsDeposit } from "@/lib/savings-db";
 
 export type TransactionType = "income" | "expense";
 export type SyncStatus = "pending" | "synced" | "error";
@@ -46,12 +47,18 @@ export interface AppSetting { key: string; value: string }
 class FinanceDatabase extends Dexie {
   transactions!: EntityTable<FinanceTransaction, "id">;
   settings!: EntityTable<AppSetting, "key">;
+  savingsGoals!: EntityTable<SavingsGoal, "id">;
+  savingsDeposits!: EntityTable<SavingsDeposit, "id">;
 
   constructor() {
     super("morrow-finance");
     this.version(1).stores({
       transactions: "id, type, category, transactionDate, updatedAt, syncStatus, deletedAt",
       settings: "key",
+    });
+    this.version(2).stores({
+      savingsGoals: "id, updated_at, syncStatus",
+      savingsDeposits: "id, goal_id, updated_at, syncStatus",
     });
   }
 }
@@ -227,5 +234,7 @@ export async function softDeleteTransaction(id: string) {
 export async function exportData() {
   const transactions = await db.transactions.toArray();
   const settings = await db.settings.toArray();
-  return JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), transactions, settings }, null, 2);
+  const savingsGoals = await db.savingsGoals.toArray();
+  const savingsDeposits = await db.savingsDeposits.toArray();
+  return JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), transactions, settings, savingsGoals, savingsDeposits }, null, 2);
 }

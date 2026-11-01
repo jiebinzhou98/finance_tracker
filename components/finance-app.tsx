@@ -13,6 +13,8 @@ import { addTransaction, emptyFinancePlan, ensureMonthlyRecurringTransactions, e
 import { currencyLabels, displayAmount, ensureTransactionRates, getExchangeRatesForDate, supportedCurrencies } from "@/lib/exchange-rates";
 import { getSupabase, isCloudConfigured, syncTransactions } from "@/lib/supabase";
 import { registerFinanceTools } from "@/lib/webmcp";
+import { SavingsGoals } from "@/components/savings-goals";
+import { getSavings, savingsPendingCount, type SavingsGoal, type SavingsDeposit } from "@/lib/savings-db";
 
 type View = "overview" | "transactions" | "insights" | "summary" | "settings";
 const expenseCategories = ["餐饮", "糖分", "交通", "住房", "购物", "娱乐", "健康", "其他"];
@@ -59,6 +61,9 @@ export default function FinanceApp() {
   const [signedInEmail, setSignedInEmail] = useState("");
   const [financePlan, setFinancePlan] = useState<FinancePlan>(() => emptyFinancePlan());
   const [savingPlan, setSavingPlan] = useState(false);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
+  const [savingsDeposits, setSavingsDeposits] = useState<SavingsDeposit[]>([]);
+  const [savingsPending, setSavingsPending] = useState(0);
   const signedInRef = useRef("");
   const syncingRef = useRef(false);
   const syncQueuedRef = useRef(false);
@@ -74,6 +79,8 @@ export default function FinanceApp() {
       if (await ensureTransactionRates(items, savedCurrency)) items = await getTransactions();
     } catch { /* Keep the app usable offline; missing rates will be filled next time it is online. */ }
     setTransactions(items); setCurrency(savedCurrency); setFinancePlan(savedPlan); setLoading(false);
+    const [savings, pending] = await Promise.all([getSavings(), savingsPendingCount()]);
+    setSavingsGoals(savings.goals); setSavingsDeposits(savings.deposits); setSavingsPending(pending);
   }, []);
 
   useEffect(() => registerFinanceTools(currency, load), [currency, load]);
@@ -89,7 +96,7 @@ export default function FinanceApp() {
   const expense = monthTransactions.filter((item) => item.type === "expense").reduce((sum, item) => sum + amountInDisplayCurrency(item), 0);
   const previousExpense = previousMonthTransactions.filter((item) => item.type === "expense").reduce((sum, item) => sum + amountInDisplayCurrency(item), 0);
   const balance = income - expense;
-  const pendingCount = transactions.filter((item) => item.syncStatus !== "synced").length;
+  const pendingCount = transactions.filter((item) => item.syncStatus !== "synced").length + savingsPending;
   const money = useCallback((cents: number) => new Intl.NumberFormat("zh-CN", { style: "currency", currency, maximumFractionDigits: 2 }).format(cents / 100), [currency]);
   const chartData = useMemo(() => Array.from({ length: 6 }, (_, index) => {
     const date = monthDate(selectedMonth); date.setMonth(date.getMonth() - (5 - index)); const key = monthKey(date);
@@ -407,7 +414,7 @@ export default function FinanceApp() {
     <main className="mx-auto min-h-screen max-w-[1480px] pb-28 lg:ml-[248px] lg:pb-8">
       <header className="sticky top-0 z-20 flex h-[calc(74px+env(safe-area-inset-top))] items-center justify-between border-b border-[#e7e5dc] bg-[#faf7f2]/90 px-5 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:px-8 lg:h-[74px] lg:px-10 lg:pt-0"><div className="lg:hidden"><Brand compact /></div><p className="hidden text-sm text-[#72796e] lg:block">{new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(new Date())}</p><div className="flex items-center gap-3"><span className={`hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium sm:flex ${cloudStatusTone}`}>{syncing ? <Loader2 className="size-3.5 animate-spin" /> : online ? <Check className="size-3.5" /> : <WifiOff className="size-3.5" />}{cloudStatus}</span><Button onClick={() => setDialogOpen(true)} className="h-11 rounded-xl bg-[#637f60] px-4 text-white shadow-[0_8px_24px_rgba(99,127,96,.22)] hover:bg-[#4d684a]"><Plus className="size-4" />新增记录</Button></div></header>
       <div className="px-4 py-5 md:px-8 lg:px-10 lg:py-9">
-        {view === "overview" && <Overview loading={loading} month={selectedMonth} onMonthChange={setSelectedMonth} balance={balance} income={income} expense={expense} money={money} transactions={monthTransactions} amountFor={amountInDisplayCurrency} displayCurrency={currency} chartData={chartData} financePlan={financePlan} onEdit={setEditingTransaction} onDelete={handleDelete} onAdd={() => setDialogOpen(true)} />}
+        {view === "overview" && <Overview loading={loading} month={selectedMonth} onMonthChange={setSelectedMonth} balance={balance} income={income} expense={expense} money={money} transactions={monthTransactions} amountFor={amountInDisplayCurrency} displayCurrency={currency} chartData={chartData} financePlan={financePlan} savings={<SavingsGoals goals={savingsGoals} deposits={savingsDeposits} currency={currency} onChanged={async () => { await load(); if (navigator.onLine && signedInRef.current) void handleSync(true); }} />} onEdit={setEditingTransaction} onDelete={handleDelete} onAdd={() => setDialogOpen(true)} />}
         {view === "transactions" && <TransactionsView transactions={activeTransactions} money={money} amountFor={amountInDisplayCurrency} displayCurrency={currency} dateFilter={transactionDateFilter} onClearDateFilter={() => setTransactionDateFilter(null)} onEdit={setEditingTransaction} onDelete={handleDelete} onAdd={() => setDialogOpen(true)} />}
         {view === "insights" && <InsightsView expense={expense} money={money} breakdown={expenseBreakdown} chartData={chartData} transactions={monthTransactions.map((item) => ({ ...item, amount: amountInDisplayCurrency(item) }))} month={selectedMonth} onMonthChange={setSelectedMonth} onViewDate={openTransactionsForDate} />}
         {view === "summary" && <SummaryView expense={expense} previousExpense={previousExpense} money={money} breakdown={expenseBreakdown} previousBreakdown={previousExpenseBreakdown} month={selectedMonth} onMonthChange={setSelectedMonth} />}
@@ -435,7 +442,7 @@ function MonthNavigator({ month, onChange }: { month: string; onChange: (month: 
   </div>;
 }
 
-function Overview({ loading, month, onMonthChange, balance, income, expense, money, transactions, amountFor, displayCurrency, chartData, financePlan, onEdit, onDelete, onAdd }: { loading: boolean; month: string; onMonthChange: (month: string) => void; balance: number; income: number; expense: number; money: (n: number) => string; transactions: FinanceTransaction[]; amountFor: (transaction: FinanceTransaction) => number; displayCurrency: string; chartData: { month: string; income: number; expense: number }[]; financePlan: FinancePlan; onEdit: (transaction: FinanceTransaction) => void; onDelete: (id: string) => void; onAdd: () => void }) {
+function Overview({ loading, month, onMonthChange, balance, income, expense, money, transactions, amountFor, displayCurrency, chartData, financePlan, savings, onEdit, onDelete, onAdd }: { loading: boolean; month: string; onMonthChange: (month: string) => void; balance: number; income: number; expense: number; money: (n: number) => string; transactions: FinanceTransaction[]; amountFor: (transaction: FinanceTransaction) => number; displayCurrency: string; chartData: { month: string; income: number; expense: number }[]; financePlan: FinancePlan; savings: React.ReactNode; onEdit: (transaction: FinanceTransaction) => void; onDelete: (id: string) => void; onAdd: () => void }) {
   const budgetProgress = financePlan.monthlyBudget ? Math.min(100, expense / financePlan.monthlyBudget * 100) : 0;
   const availableToSave = Math.max(0, balance);
   const savingsProgress = financePlan.monthlySavingsTarget ? Math.min(100, availableToSave / financePlan.monthlySavingsTarget * 100) : 0;
@@ -446,6 +453,7 @@ function Overview({ loading, month, onMonthChange, balance, income, expense, mon
       {financePlan.monthlyBudget > 0 && <PlanProgressCard icon={Target} title="月度预算" value={expense > financePlan.monthlyBudget ? `已超出 ${money(expense - financePlan.monthlyBudget)}` : `还可使用 ${money(financePlan.monthlyBudget - expense)}`} detail={`${money(expense)} / ${money(financePlan.monthlyBudget)}`} progress={budgetProgress} tone="blue" />}
       {financePlan.monthlySavingsTarget > 0 && <PlanProgressCard icon={PiggyBank} title="本月储蓄" value={availableToSave >= financePlan.monthlySavingsTarget ? "本月目标已达成" : `还差 ${money(financePlan.monthlySavingsTarget - availableToSave)}`} detail={`${money(availableToSave)} / ${money(financePlan.monthlySavingsTarget)}`} progress={savingsProgress} tone="green" />}
     </section>}
+    {savings}
     <section className="mt-5 grid gap-5 xl:grid-cols-[1.35fr_.85fr]"><div className="surface-card p-5 md:p-6"><div className="mb-5 flex items-center justify-between"><div><h2 className="section-title">收支走势</h2><p className="section-subtitle">截至所选月份的六个月</p></div><span className="rounded-full bg-[#edf2e8] px-3 py-1.5 text-xs font-semibold text-[#637f60]">月度</span></div><div className="h-[245px]"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData} margin={{ left: -25, right: 4, top: 10 }}><defs><linearGradient id="expenseFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#637f60" stopOpacity={0.25}/><stop offset="100%" stopColor="#637f60" stopOpacity={0}/></linearGradient></defs><CartesianGrid vertical={false} stroke="#f1eee7"/><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#7e8176", fontSize: 12 }}/><Tooltip formatter={(value) => money(Number(value) * 100)} contentStyle={{ border: 0, borderRadius: 14, boxShadow: "0 14px 40px rgba(20,33,61,.12)" }}/><Area type="monotone" dataKey="expense" name="支出" stroke="#637f60" strokeWidth={3} fill="url(#expenseFill)" /></AreaChart></ResponsiveContainer></div></div><div className="surface-card overflow-hidden"><div className="flex items-center justify-between border-b border-[#f1eee7] px-5 py-5 md:px-6"><div><h2 className="section-title">当月记录</h2><p className="section-subtitle">按日期排序</p></div></div>{loading ? <div className="grid min-h-[250px] place-items-center"><Loader2 className="size-6 animate-spin text-[#637f60]" /></div> : <TransactionList transactions={transactions.slice(0, 5)} money={money} amountFor={amountFor} displayCurrency={displayCurrency} onEdit={onEdit} onDelete={onDelete} emptyAction={onAdd} />}</div></section>
   </>;
 }
