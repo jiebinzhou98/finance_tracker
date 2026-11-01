@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "本地优先、离线可用的个人收支记录工具。",
     start_url: "/",
     display: "standalone",
-    background_color: "#f3f6fb",
-    theme_color: "#0b1220",
+    background_color: "#faf7f2",
+    theme_color: "#faf7f2",
     orientation: "portrait",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },

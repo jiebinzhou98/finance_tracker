@@ -3,29 +3,29 @@
 @import "../vendor/shadcn-tailwind-4.13.0.css";
 
 :root {
-  --background: #f3f6fb;
-  --foreground: #132039;
+  --background: #faf7f2;
+  --foreground: #29312a;
   --card: #ffffff;
-  --card-foreground: #132039;
+  --card-foreground: #29312a;
   --popover: #ffffff;
-  --popover-foreground: #132039;
-  --primary: #2864f0;
+  --popover-foreground: #29312a;
+  --primary: #637f60;
   --primary-foreground: #ffffff;
-  --secondary: #edf2fb;
-  --secondary-foreground: #132039;
-  --muted: #edf2f7;
-  --muted-foreground: #718096;
-  --accent: #eef3ff;
-  --accent-foreground: #1f55d7;
+  --secondary: #f0f2e9;
+  --secondary-foreground: #29312a;
+  --muted: #f2f0ea;
+  --muted-foreground: #72796e;
+  --accent: #edf2e8;
+  --accent-foreground: #4d684a;
   --destructive: #d64b5e;
-  --border: #dfe6f1;
-  --input: #d9e1ed;
-  --ring: #2864f0;
-  --chart-1: #2864f0;
-  --chart-2: #24a36b;
-  --chart-3: #fb7185;
-  --chart-4: #f59e0b;
-  --chart-5: #a78bfa;
+  --border: #e7e5dc;
+  --input: #e2dfd5;
+  --ring: #637f60;
+  --chart-1: #637f60;
+  --chart-2: #718b70;
+  --chart-3: #e8a18b;
+  --chart-4: #d8b568;
+  --chart-5: #b9adc1;
   --radius: 0.8rem;
 }
 
@@ -56,18 +56,39 @@
 }
 
 * { box-sizing: border-box; }
-html { background: #0b1220; }
+html { background: #faf7f2; }
 body { margin: 0; background: var(--background); color: var(--foreground); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 
-.surface-card { border: 1px solid #e3e9f2; border-radius: 22px; background: #fff; box-shadow: 0 12px 36px rgba(36, 55, 88, .06); }
-.section-title { font-size: 1rem; font-weight: 700; letter-spacing: -.02em; color: #17243b; }
-.section-subtitle { margin-top: .25rem; font-size: .8rem; color: #8793a7; }
-.eyebrow { font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #2864f0; }
-.page-title { margin-top: .3rem; font-size: clamp(1.8rem, 4vw, 2.5rem); font-weight: 750; letter-spacing: -.045em; color: #0d1930; }
+.surface-card { border: 1px solid #ece9e1; border-radius: 22px; background: #fff; box-shadow: 0 6px 24px rgba(65, 66, 42, .035); }
+.section-title { font-size: 1rem; font-weight: 700; letter-spacing: -.02em; color: #30392f; }
+.section-subtitle { margin-top: .25rem; font-size: .8rem; color: #7e8176; }
+.eyebrow { font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #637f60; }
+.page-title { margin-top: .3rem; font-size: clamp(1.8rem, 4vw, 2.5rem); font-weight: 750; letter-spacing: -.045em; color: #273329; }
 
-@media (max-width: 640px) { .surface-card { border-radius: 19px; } }
+.mobile-navigation button { min-height: 52px; font-size: 11px; }
+.morrow-app input, .morrow-app select { background-color: #fffefa; }
+.morrow-app button:focus-visible { outline: 2px solid #637f60; outline-offset: 3px; }
+.summary-hero .text-slate-400 { color: #747365; }
+@media (max-width: 767px) {
+  .surface-card { border-radius: 20px; }
+  .overview-totals { border: 1px solid #ece9e1; border-radius: 24px; background: white; padding: 6px; gap: 0; }
+  .overview-totals .summary-tile { border: 0; box-shadow: none; border-radius: 0; padding: 16px; }
+  .overview-totals .summary-tile-blue { grid-column: span 2; border-bottom: 1px solid #f1eee7; }
+  .overview-totals .summary-tile-green { border-right: 1px solid #f1eee7; }
+  .overview-totals .summary-tile > div > span:last-child { display: none; }
+  .overview-totals .summary-tile-blue > div { display: none; }
+  .overview-totals .summary-tile p { margin-top: 8px; }
+  .overview-totals .summary-tile-blue p:last-child { font-size: 36px; }
+  .overview-totals .summary-tile:not(.summary-tile-blue) > div { float: left; margin-right: 10px; margin-top: 5px; }
+  .overview-totals .summary-tile:not(.summary-tile-blue) p:last-child { font-size: 18px; }
+  .overview-totals .summary-tile:not(.summary-tile-blue) p { font-size: 12px; }
+  .morrow-app .page-title { font-size: 28px; }
+  .morrow-app header { border-bottom-color: transparent; }
+  .morrow-app header button { border-radius: 999px; box-shadow: none; }
+  .morrow-app details > section.surface-card { border: 0; box-shadow: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
