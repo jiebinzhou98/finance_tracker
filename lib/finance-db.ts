@@ -2,6 +2,8 @@ import Dexie, { type EntityTable } from "dexie";
 
 export type TransactionType = "income" | "expense";
 export type SyncStatus = "pending" | "synced" | "error";
+export const duplicateTransactionMessage = "这笔记录已经保存过了，请勿重复提交";
+const recentDuplicateWindowMs = 60_000;
 
 export interface RecurringRule {
   id: string;
@@ -173,7 +175,8 @@ export async function getTransactions() {
 export async function addTransaction(
   transaction: Pick<FinanceTransaction, "type" | "amount" | "currency" | "category" | "subcategory" | "note" | "transactionDate" | "exchangeRates" | "exchangeRateDate">,
 ) {
-  const now = new Date().toISOString();
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
   const record: FinanceTransaction = {
     ...transaction,
     id: crypto.randomUUID(),
@@ -182,8 +185,21 @@ export async function addTransaction(
     deletedAt: null,
     syncStatus: "pending",
   };
-  await db.transactions.add(record);
-  return record;
+  return db.transaction("rw", db.transactions, async () => {
+    const cutoff = new Date(nowDate.getTime() - recentDuplicateWindowMs).toISOString();
+    const recent = await db.transactions.where("updatedAt").aboveOrEqual(cutoff).toArray();
+    const duplicate = recent.some((item) =>
+      !item.deletedAt && item.createdAt >= cutoff &&
+      item.type === transaction.type && item.amount === transaction.amount &&
+      item.currency === transaction.currency && item.category === transaction.category &&
+      (item.subcategory ?? "") === (transaction.subcategory ?? "") &&
+      item.note.trim() === transaction.note.trim() &&
+      item.transactionDate === transaction.transactionDate,
+    );
+    if (duplicate) throw new Error(duplicateTransactionMessage);
+    await db.transactions.add(record);
+    return record;
+  });
 }
 
 export async function updateTransaction(
