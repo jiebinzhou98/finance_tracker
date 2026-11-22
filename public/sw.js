@@ -1,6 +1,19 @@
 const CACHE = "morrow-v1";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/favicon.svg"];
 
+self.addEventListener("push", (event) => {
+  const message = event.data?.json();
+  event.waitUntil(self.registration.showNotification(message?.title ?? "Morrow", {
+    body: message?.body ?? "",
+    icon: "/apple-touch-icon.png",
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(self.clients.openWindow("/"));
+});
+
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)));
   self.skipWaiting();

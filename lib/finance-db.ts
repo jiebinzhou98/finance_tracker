@@ -14,6 +14,7 @@ export interface RecurringRule {
   category: string;
   note: string;
   day: number;
+  paymentReminder?: boolean;
 }
 
 export interface FinancePlan {
@@ -86,6 +87,7 @@ function normalizeFinancePlan(value: Partial<FinancePlan>): FinancePlan {
       ...rule,
       amount: Math.round(rule.amount),
       day: Math.min(31, Math.max(1, Math.round(Number(rule.day) || 1))),
+      paymentReminder: rule.type === "expense" && rule.paymentReminder === true,
       currency: String(rule.currency || "CAD").toUpperCase(),
       category: String(rule.category || "其他"),
       note: String(rule.note || "固定收支"),

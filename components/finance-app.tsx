@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { ArrowDownLeft, ArrowUpRight, BarChart3, CalendarClock, Check, ChevronLeft, ChevronRight, Cloud, CloudOff, Download, Home, Landmark, Loader2, LogOut, Pencil, PiggyBank, Plus, ReceiptText, RefreshCw, Search, SearchX, Settings, Target, Trash2, WalletCards, WifiOff } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, BarChart3, BellOff, BellRing, CalendarClock, Check, ChevronLeft, ChevronRight, Cloud, CloudOff, Download, Home, Landmark, Loader2, LogOut, Pencil, PiggyBank, Plus, ReceiptText, RefreshCw, Search, SearchX, Settings, Target, Trash2, WalletCards, WifiOff } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import { currencyLabels, displayAmount, ensureTransactionRates, getExchangeRates
 import { getSupabase, isCloudConfigured, syncTransactions } from "@/lib/supabase";
 import { registerFinanceTools } from "@/lib/webmcp";
 import { SavingsGoals } from "@/components/savings-goals";
+import { PushTest } from "@/components/push-test";
 import { getSavings, savingsPendingCount, type SavingsGoal, type SavingsDeposit } from "@/lib/savings-db";
 
 type View = "overview" | "transactions" | "insights" | "summary" | "settings";
@@ -663,6 +665,7 @@ type SettingsViewWithPlanProps = {
 function SettingsViewWithPlan({ financePlan, savingPlan, onSavePlan, ...settingsProps }: SettingsViewWithPlanProps) {
   return <>
     <SettingsView {...settingsProps} financePlan={financePlan} savingPlan={savingPlan} onSavePlan={onSavePlan} />
+    <PushTest signedIn={Boolean(settingsProps.signedInEmail)} />
     <details className="surface-card mx-auto mt-5 max-w-3xl"><summary className="cursor-pointer px-5 py-5 font-semibold text-[#30392f]">月度预算、储蓄与固定收支 <span className="ml-2 text-xs font-normal text-[#66715f]">点击展开设置</span></summary><PlanSettings key={financePlan.updatedAt || "empty"} plan={financePlan} currency={settingsProps.currency} saving={savingPlan} onSave={onSavePlan} /></details>
   </>;
 }
@@ -670,6 +673,7 @@ function SettingsViewWithPlan({ financePlan, savingPlan, onSavePlan, ...settings
 function PlanSettings({ plan, currency, saving, onSave }: { plan: FinancePlan; currency: string; saving: boolean; onSave: SettingsViewWithPlanProps["onSavePlan"] }) {
   const [budget, setBudget] = useState(() => plan.monthlyBudget ? String(plan.monthlyBudget / 100) : "");
   const [savings, setSavings] = useState(() => plan.monthlySavingsTarget ? String(plan.monthlySavingsTarget / 100) : "");
+  const [ruleToRemove, setRuleToRemove] = useState<RecurringRule | null>(null);
   const [rules, setRules] = useState<RecurringRule[]>(() => plan.recurringRules);
   const [ruleType, setRuleType] = useState<TransactionType>("expense");
   const [ruleAmount, setRuleAmount] = useState("");
@@ -728,10 +732,42 @@ function PlanSettings({ plan, currency, saving, onSave }: { plan: FinancePlan; c
         </div>
       </div>
 
-      {rules.length > 0 && <div className="space-y-2">{rules.map((rule) => <div key={rule.id} className="flex items-center gap-3 rounded-2xl border border-[#e9e7de] p-3"><span className={`grid size-10 shrink-0 place-items-center rounded-xl ${rule.type === "income" ? "bg-[#edf2e8] text-[#536f4f]" : "bg-[#fff0f2] text-[#d64b5e]"}`}>{rule.type === "income" ? <ArrowDownLeft className="size-5" /> : <ArrowUpRight className="size-5" />}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-[#30392f]">{rule.note}</p><p className="mt-0.5 text-xs text-[#7e8176]">每月 {rule.day} 日 · {rule.category}</p></div><p className={`shrink-0 text-sm font-bold ${rule.type === "income" ? "text-[#536f4f]" : "text-[#30392f]"}`}>{rule.type === "income" ? "+" : "−"}{new Intl.NumberFormat("zh-CN", { style: "currency", currency: rule.currency }).format(rule.amount / 100)}</p><button type="button" onClick={() => setRules((current) => current.filter((item) => item.id !== rule.id))} className="grid size-9 shrink-0 place-items-center rounded-lg text-[#949b8c] hover:bg-[#fff0f2] hover:text-[#d64b5e]" aria-label={`删除固定项目${rule.note}`}><Trash2 className="size-4" /></button></div>)}</div>}
-
+      {rules.some((rule) => rule.type === "expense") && <p id="payment-reminder-note" className="text-xs leading-5 text-[#536f4f]">锁屏推送尚未启用。可先保存需要提醒的项目。</p>}
+      {rules.length > 0 && <div className="space-y-2">{rules.map((rule) => <div key={rule.id} className="rounded-2xl border border-[#e9e7de] p-3">
+        <div className="flex items-center gap-3"><span className={`grid size-10 shrink-0 place-items-center rounded-xl ${rule.type === "income" ? "bg-[#edf2e8] text-[#536f4f]" : "bg-[#fff0f2] text-[#d64b5e]"}`}>{rule.type === "income" ? <ArrowDownLeft className="size-5" /> : <ArrowUpRight className="size-5" />}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-[#30392f]">{rule.note}</p><p className="mt-0.5 text-xs text-[#7e8176]">每月 {rule.day} 日 · {rule.category}</p></div><p className={`shrink-0 text-sm font-bold ${rule.type === "income" ? "text-[#536f4f]" : "text-[#30392f]"}`}>{rule.type === "income" ? "+" : "−"}{new Intl.NumberFormat("zh-CN", { style: "currency", currency: rule.currency }).format(rule.amount / 100)}</p><button type="button" onClick={() => setRuleToRemove(rule)} className="grid size-9 shrink-0 place-items-center rounded-lg text-[#949b8c] hover:bg-[#fff0f2] hover:text-[#d64b5e]" aria-label={`删除固定项目${rule.note}`}><Trash2 className="size-4" /></button>
+          {rule.type === "expense" && (
+            <button
+              type="button"
+              aria-label={`${rule.note}缴费提醒`}
+              aria-pressed={rule.paymentReminder === true}
+              aria-describedby="payment-reminder-note"
+              title={rule.paymentReminder ? "关闭缴费提醒" : "开启缴费提醒"}
+              onClick={() => setRules((current) => current.map((item) =>
+                item.id === rule.id ? { ...item, paymentReminder: !item.paymentReminder } : item
+              ))}
+              className={`grid size-11 shrink-0 place-items-center rounded-full transition-colors ${rule.paymentReminder ? "bg-[#e6eddf] text-[#4d684a] hover:bg-[#d9e5d2]" : "text-[#66715f] hover:bg-[#edf2e8]"}`}
+            >
+              {rule.paymentReminder ? <BellRing aria-hidden="true" className="size-[18px]" /> : <BellOff aria-hidden="true" className="size-[18px]" />}
+            </button>
+          )}
+        </div>
+      </div>)}</div>}
       <Button type="submit" disabled={saving} className="h-11 w-full rounded-xl bg-[#637f60]">{saving ? <Loader2 className="animate-spin" /> : <PiggyBank />}保存月度计划</Button>
     </form>
+    <AlertDialog open={ruleToRemove !== null} onOpenChange={(open) => { if (!open) setRuleToRemove(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>移除「{ruleToRemove?.note}」？</AlertDialogTitle>
+          <AlertDialogDescription>保存月度计划后，此项目将停止自动记账。已生成的收支记录会保留。</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction onClick={() => {
+            if (ruleToRemove) setRules((current) => current.filter((item) => item.id !== ruleToRemove.id));
+          }}>确认移除</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </section>;
 }
 
