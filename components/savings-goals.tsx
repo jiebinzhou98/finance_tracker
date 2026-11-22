@@ -75,6 +75,15 @@ export function SavingsGoals({ goals, deposits, currency, onChanged }: { goals: 
 
 function ProgressBar({ value }: { value: number }) { return <div role="progressbar" aria-label="储蓄目标进度" aria-valuenow={Math.floor(value)} aria-valuemin={0} aria-valuemax={100} className="mt-3 h-3 overflow-hidden rounded-full bg-[#dbe2d3]"><div className="h-full rounded-full bg-[#637f60] transition-[width] duration-500" style={{ width: `${value}%` }} /></div>; }
 
+const goalNameExamples: Record<string, string> = {
+  "🌱": "心愿基金",
+  "✈️": "旅行基金",
+  "🏠": "买房基金",
+  "💻": "新电脑基金",
+  "🛟": "应急基金",
+  "🎁": "礼物基金",
+};
+
 function GoalForm({ goal, defaultCurrency, hasDeposits, busy, onSave }: { goal?: SavingsGoal; defaultCurrency: string; hasDeposits: boolean; busy: boolean; onSave: (input: GoalInput) => void }) {
   const [icon, setIcon] = useState(goal?.icon ?? "🌱");
   function submit(event: FormEvent<HTMLFormElement>) {
