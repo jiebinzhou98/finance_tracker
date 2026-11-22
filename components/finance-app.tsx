@@ -734,7 +734,7 @@ function PlanSettings({ plan, currency, saving, onSave }: { plan: FinancePlan; c
 
       {rules.some((rule) => rule.type === "expense") && <p id="payment-reminder-note" className="text-xs leading-5 text-[#536f4f]">锁屏推送尚未启用。可先保存需要提醒的项目。</p>}
       {rules.length > 0 && <div className="space-y-2">{rules.map((rule) => <div key={rule.id} className="rounded-2xl border border-[#e9e7de] p-3">
-        <div className="flex items-center gap-3"><span className={`grid size-10 shrink-0 place-items-center rounded-xl ${rule.type === "income" ? "bg-[#edf2e8] text-[#536f4f]" : "bg-[#fff0f2] text-[#d64b5e]"}`}>{rule.type === "income" ? <ArrowDownLeft className="size-5" /> : <ArrowUpRight className="size-5" />}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-[#30392f]">{rule.note}</p><p className="mt-0.5 text-xs text-[#7e8176]">每月 {rule.day} 日 · {rule.category}</p></div><p className={`shrink-0 text-sm font-bold ${rule.type === "income" ? "text-[#536f4f]" : "text-[#30392f]"}`}>{rule.type === "income" ? "+" : "−"}{new Intl.NumberFormat("zh-CN", { style: "currency", currency: rule.currency }).format(rule.amount / 100)}</p><button type="button" onClick={() => setRuleToRemove(rule)} className="grid size-9 shrink-0 place-items-center rounded-lg text-[#949b8c] hover:bg-[#fff0f2] hover:text-[#d64b5e]" aria-label={`删除固定项目${rule.note}`}><Trash2 className="size-4" /></button>
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 sm:flex"><span className={`grid size-10 shrink-0 place-items-center rounded-xl ${rule.type === "income" ? "bg-[#edf2e8] text-[#536f4f]" : "bg-[#fff0f2] text-[#d64b5e]"}`}>{rule.type === "income" ? <ArrowDownLeft className="size-5" /> : <ArrowUpRight className="size-5" />}</span><div className="min-w-0 flex-1"><p className="break-words text-sm font-semibold text-[#30392f]">{rule.note}</p><p className="mt-0.5 text-xs text-[#7e8176]">每月 {rule.day} 日 · {rule.category}</p></div><div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-1 pl-0 sm:ml-auto sm:flex-nowrap"><p className={`mr-auto min-w-0 break-all pr-2 text-sm tabular-nums font-bold ${rule.type === "income" ? "text-[#536f4f]" : "text-[#30392f]"}`}>{rule.type === "income" ? "+" : "−"}{new Intl.NumberFormat("zh-CN", { style: "currency", currency: rule.currency }).format(rule.amount / 100)}</p><button type="button" onClick={() => setRuleToRemove(rule)} className="grid size-11 shrink-0 place-items-center rounded-lg text-[#949b8c] hover:bg-[#fff0f2] hover:text-[#d64b5e]" aria-label={`删除固定项目${rule.note}`}><Trash2 className="size-4" /></button>
           {rule.type === "expense" && (
             <button
               type="button"
@@ -750,6 +750,7 @@ function PlanSettings({ plan, currency, saving, onSave }: { plan: FinancePlan; c
               {rule.paymentReminder ? <BellRing aria-hidden="true" className="size-[18px]" /> : <BellOff aria-hidden="true" className="size-[18px]" />}
             </button>
           )}
+          </div>
         </div>
       </div>)}</div>}
       <Button type="submit" disabled={saving} className="h-11 w-full rounded-xl bg-[#637f60]">{saving ? <Loader2 className="animate-spin" /> : <PiggyBank />}保存月度计划</Button>
