@@ -69,8 +69,8 @@ button { cursor: pointer; }
 
 .mobile-navigation button { min-height: 52px; font-size: 11px; }
 .savings-dialog { overscroll-behavior: contain; }
-@media (max-width: 639px) {
-  .savings-dialog {
+@media (width < 40rem) {
+  [data-slot="dialog-content"].savings-dialog {
     inset: 0;
     width: 100%;
     max-width: 100%;
@@ -78,6 +78,7 @@ button { cursor: pointer; }
     max-height: 100dvh;
     transform: none;
     translate: none;
+    animation: none;
     border-radius: 0;
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
